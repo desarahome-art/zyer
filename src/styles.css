@@ -139,3 +139,23 @@ button{-webkit-tap-highlight-color:transparent}
 textarea.mf{min-height:auto}
 .mf[type=date],.mf[type=time]{appearance:none;-webkit-appearance:none}
 .x:disabled,.btn-p:disabled,.btn-s:disabled,.b:disabled{opacity:.6;cursor:default}
+
+/* isi pop up tidak boleh mengecil (memperbaiki pilihan yang terpotong di HP) */
+.sh-body > *{flex-shrink:0}
+
+/* ===== pop up Chat WA ===== */
+.wa-step{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#1F4A36;margin:0 0 10px}
+.wa-step b{width:22px;height:22px;border-radius:50%;background:#1F4A36;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center}
+.tpl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.tpl{position:relative;display:flex;align-items:center;gap:10px;min-height:64px;padding:10px 12px;border:1.5px solid #E3E6E2;border-radius:16px;background:#fff;color:#1C2321;text-align:left;cursor:pointer;font-family:inherit}
+.tpl:hover{border-color:#9FC9B0}
+.tpl.on{border-color:#1F4A36;background:#F2F8F4;box-shadow:0 0 0 3px rgba(47,107,79,.14)}
+.tpl .ti{width:38px;height:38px;flex:none;border-radius:12px;background:#EEF0ED;color:#3D4643;display:flex;align-items:center;justify-content:center}
+.tpl.on .ti{background:#1F4A36;color:#fff}
+.tpl strong{display:block;font-size:14px;line-height:1.25}
+.tpl small{display:block;font-size:11.5px;color:#5F6964;margin-top:2px;line-height:1.3}
+.tpl .sug{position:absolute;top:-8px;right:10px;background:#C9822B;color:#fff;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px}
+.wa-prev{background:#EFEAE2;border-radius:16px;padding:12px;max-height:260px;overflow-y:auto;display:flex;justify-content:flex-end}
+.wa-send{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;border-radius:16px;background:#1E6B3A;color:#fff;font-size:16px;font-weight:800;text-decoration:none}
+.wa-send:hover{background:#17562E;color:#fff}
+@media (max-width:360px){.tpl-grid{grid-template-columns:minmax(0,1fr)}}
