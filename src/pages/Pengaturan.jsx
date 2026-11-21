@@ -3,12 +3,12 @@ import Icon from '../components/Icon';
 import Sheet from '../components/Sheet';
 import { useApp } from '../AppContext';
 import {
-  deleteJenis, deleteLokasi, deletePaket, insertJenis, insertLokasi, insertPaket, saveTemplate, updatePaket,
+  deleteAddon, deleteJenis, deleteLokasi, deletePaket, insertAddon, insertJenis, insertLokasi, insertPaket, saveTemplate, updateAddon, updatePaket,
 } from '../lib/api';
 import { DEFAULT_TEMPLATES } from '../lib/defaults';
 import { num, ribuan, rp } from '../lib/format';
 
-const TABS = [['paket', 'Sesi & Paket'], ['lokasi', 'Lokasi'], ['wa', 'Template WA']];
+const TABS = [['paket', 'Paket'], ['addon', 'Add-on'], ['lokasi', 'Lokasi'], ['wa', 'Template WA']];
 
 export default function Pengaturan() {
   const [tab, setTab] = useState('paket');
@@ -16,13 +16,14 @@ export default function Pengaturan() {
   return (
     <>
       <div className="ph"><div><div className="eyebrow">Data dasar untuk form Tambah Client</div><h1>Pengaturan</h1></div></div>
-      <div className="seg" role="group" aria-label="Bagian pengaturan" style={{ maxWidth: 520 }}>
+      <div className="seg" role="group" aria-label="Bagian pengaturan" style={{ maxWidth: 620, gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
         {TABS.map(([id, label]) => (
           <button key={id} type="button" className={tab === id ? 'on' : undefined} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
       {settingsError ? <p className="alert">Gagal memuat pengaturan: {settingsError}</p> : null}
       {tab === 'paket' ? <TabPaket /> : null}
+      {tab === 'addon' ? <TabAddon /> : null}
       {tab === 'lokasi' ? <TabLokasi /> : null}
       {tab === 'wa' ? <TabTemplate /> : null}
     </>
@@ -131,6 +132,83 @@ function TabPaket() {
   );
 }
 
+/* ---------------- Add-on ---------------- */
+const EMPTY_ADDON = { nama: '', harga: '', ket: '', per: false, satuan: '' };
+function TabAddon() {
+  const { addon, reloadSettings, toast } = useApp();
+  const [sheet, setSheet] = useState(null); // { item? }
+  const [af, setAf] = useState(EMPTY_ADDON);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const open = (item) => {
+    setSheet({ item });
+    setAf(item ? { nama: item.nama, harga: ribuan(item.harga), ket: item.keterangan || '', per: !!item.per_jumlah, satuan: item.satuan || '' } : EMPTY_ADDON);
+    setErr('');
+  };
+  const run = async (fn, msg) => {
+    setBusy(true);
+    try { await fn(); await reloadSettings(); setSheet(null); toast(msg); }
+    catch (e) { setErr(e.message.includes('duplicate') ? 'Nama add-on sudah dipakai.' : e.message); }
+    finally { setBusy(false); }
+  };
+  const save = () => {
+    if (!af.nama.trim() || !num(af.harga)) { setErr('Nama dan harga add-on wajib diisi.'); return; }
+    const row = { nama: af.nama.trim(), harga: num(af.harga), keterangan: af.ket.trim(), per_jumlah: af.per, satuan: af.per ? af.satuan.trim() : '' };
+    if (sheet.item) run(() => updateAddon(sheet.item.id, row), 'Add-on diperbarui');
+    else run(() => insertAddon({ ...row, urutan: addon.length + 1 }), 'Add-on ditambahkan');
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <p style={{ margin: 0, fontSize: 14, color: '#5F6964', lineHeight: 1.45 }}>Layanan tambahan yang bisa dipilih untuk semua jenis sesi.</p>
+        <button className="chip" type="button" onClick={() => open(null)}>+ Add-on</button>
+      </div>
+      <div className="grid-cards">
+        {addon.map((a) => (
+          <button key={a.id} className="prow" type="button" onClick={() => open(a)} style={{ background: '#FFFFFF', border: '1px solid #E3E6E2', marginBottom: 0 }}>
+            <span className="jbadge" aria-hidden="true"><Icon name="plus" size={18} stroke={2.6} /></span>
+            <span style={{ flex: 1, minWidth: 0 }}><strong style={{ display: 'block', fontSize: 15 }}>{a.nama}</strong>
+              <span style={{ fontSize: 12, color: '#5F6964' }}>{a.keterangan || (a.per_jumlah ? 'Dihitung per ' + (a.satuan || 'item') : 'Harga tetap')}</span></span>
+            <strong style={{ fontSize: 15, color: '#1F4A36', whiteSpace: 'nowrap' }}>{rp(a.harga)}{a.per_jumlah ? <span style={{ fontSize: 12, fontWeight: 600 }}> /{a.satuan || 'item'}</span> : null}</strong>
+            <Icon name="edit" size={16} style={{ color: '#5F6964' }} />
+          </button>
+        ))}
+        {addon.length === 0 ? <p className="empty">Belum ada add-on. Contoh: Tambah outfit, Tambah orang, Cetak foto.</p> : null}
+      </div>
+
+      {sheet ? (
+        <Sheet open onClose={() => setSheet(null)} maxWidth={520} title={sheet.item ? 'Edit Add-on' : 'Tambah Add-on'} sub="Berlaku untuk semua jenis sesi"
+          footer={(<>
+            <button className="btn-s" type="button" onClick={() => setSheet(null)}>Batal</button>
+            <button className="btn-p" type="button" onClick={save} disabled={busy}>{busy ? 'Menyimpan…' : 'Simpan'}</button>
+          </>)}>
+          <div><label className="ml" htmlFor="a-nm">Nama add-on</label>
+            <input className="mf" id="a-nm" value={af.nama} onChange={(e) => { setAf({ ...af, nama: e.target.value }); setErr(''); }} placeholder="Contoh: Tambah orang" /></div>
+          <div><label className="ml" htmlFor="a-hg">Harga</label><div className="rp"><span aria-hidden="true">Rp</span>
+            <input className="mf" id="a-hg" inputMode="numeric" value={af.harga} onChange={(e) => { setAf({ ...af, harga: ribuan(num(e.target.value)) }); setErr(''); }} placeholder="0" /></div></div>
+          <div><label className="ml" htmlFor="a-kt">Keterangan <span style={{ fontWeight: 500, color: '#5F6964' }}>(opsional)</span></label>
+            <input className="mf" id="a-kt" value={af.ket} onChange={(e) => setAf({ ...af, ket: e.target.value })} placeholder="Contoh: maks. 3 orang tambahan" /></div>
+          <button type="button" role="switch" aria-checked={af.per} className={'pk' + (af.per ? ' on' : '')} onClick={() => setAf({ ...af, per: !af.per })} style={{ marginBottom: 0 }}>
+            <span className="cbx" aria-hidden="true">{af.per ? <Icon name="check" size={14} stroke={3.4} /> : null}</span>
+            <span style={{ flex: 1 }}><strong style={{ display: 'block', fontSize: 15 }}>Dihitung per jumlah</strong>
+              <span style={{ fontSize: 12, color: '#5F6964' }}>Admin bisa isi jumlahnya, mis. 2 orang = 2 × harga</span></span>
+          </button>
+          {af.per ? (
+            <div><label className="ml" htmlFor="a-st">Satuan</label>
+              <input className="mf" id="a-st" value={af.satuan} onChange={(e) => setAf({ ...af, satuan: e.target.value })} placeholder="Contoh: orang, outfit, lembar" /></div>
+          ) : null}
+          {sheet.item ? (
+            <button className="menu-b red" type="button" disabled={busy} onClick={() => run(() => deleteAddon(sheet.item.id), 'Add-on dihapus')}><Icon name="trash" />Hapus add-on ini</button>
+          ) : null}
+          {err ? <p role="alert" className="alert" style={{ margin: 0 }}>{err}</p> : null}
+        </Sheet>
+      ) : null}
+    </>
+  );
+}
+
 /* ---------------- Lokasi ---------------- */
 function TabLokasi() {
   const { lokasi, reloadSettings, toast } = useApp();
@@ -206,7 +284,7 @@ function TabTemplate() {
         <label className="ml" htmlFor="isi">{cur.judul}</label>
         <textarea className="mf" id="isi" rows={14} value={text} onChange={(e) => setText(e.target.value)} style={{ resize: 'vertical', lineHeight: 1.5, fontSize: 15 }} />
         <p style={{ margin: '10px 0 0', fontSize: 12, color: '#5F6964', lineHeight: 1.7 }}>
-          Kode otomatis: {'{nama} {tanggal} {jam} {lokasi} {paket} {harga} {dp} {sisa} {link}'}
+          Kode otomatis: {'{nama} {tanggal} {jam} {lokasi} {paket} {rincian} {harga} {dp} {sisa} {link}'}
         </p>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: 10 }}>

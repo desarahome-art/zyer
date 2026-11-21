@@ -42,6 +42,18 @@ create table if not exists public.template_wa (
   updated_at timestamptz not null default now()
 );
 
+-- ---------- Add-on (berlaku untuk semua jenis sesi) ----------
+create table if not exists public.addon (
+  id uuid primary key default gen_random_uuid(),
+  nama text not null unique,
+  keterangan text not null default '',
+  harga bigint not null default 0 check (harga >= 0),
+  per_jumlah boolean not null default false,
+  satuan text not null default '',
+  urutan int not null default 0,
+  created_at timestamptz not null default now()
+);
+
 -- ---------- Client ----------
 create table if not exists public.clients (
   id uuid primary key default gen_random_uuid(),
@@ -61,6 +73,8 @@ create table if not exists public.clients (
   metode text not null default 'Transfer',
   selesai boolean not null default false,
   link_hasil text not null default '',
+  items jsonb not null default '[]'::jsonb,
+  diskon bigint not null default 0 check (diskon >= 0),
   created_at timestamptz not null default now()
 );
 create index if not exists clients_tanggal_idx on public.clients(tanggal);
@@ -76,11 +90,12 @@ alter table public.paket enable row level security;
 alter table public.lokasi enable row level security;
 alter table public.template_wa enable row level security;
 alter table public.clients enable row level security;
+alter table public.addon enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['jenis_sesi','paket','lokasi','template_wa','clients'] loop
+  foreach t in array array['jenis_sesi','paket','lokasi','template_wa','clients','addon'] loop
     execute format('drop policy if exists "akses_admin_%1$s" on public.%1$I', t);
     execute format('create policy "akses_admin_%1$s" on public.%1$I for all to anon, authenticated using (true) with check (true)', t);
   end loop;
@@ -116,7 +131,7 @@ insert into public.lokasi (nama, urutan) values
 on conflict (nama) do nothing;
 
 insert into public.template_wa (kode, judul, isi, urutan) values
-('konfirmasi', 'Konfirmasi Booking', E'Halo kak {nama} 👋\n\nTerima kasih sudah booking sesi foto di ZYER. Berikut detail jadwalnya:\n\n📅 Tanggal : {tanggal}\n⏰ Jam : {jam}\n📍 Lokasi : {lokasi}\n📦 Paket : {paket}\n\n💰 Harga : {harga}\n✅ DP diterima : {dp}\n🧾 Sisa pembayaran : {sisa}\n\nSisa pembayaran bisa dilunasi di hari sesi foto ya kak. Kalau ada pertanyaan, langsung chat di sini aja 😊\n\n– ZYER', 1),
+('konfirmasi', 'Konfirmasi Booking', E'Halo kak {nama} 👋\n\nTerima kasih sudah booking sesi foto di ZYER. Berikut detail jadwalnya:\n\n📅 Tanggal : {tanggal}\n⏰ Jam : {jam}\n📍 Lokasi : {lokasi}\n\n📦 Rincian :\n{rincian}\n\n💰 Total : {harga}\n✅ DP diterima : {dp}\n🧾 Sisa pembayaran : {sisa}\n\nSisa pembayaran bisa dilunasi di hari sesi foto ya kak. Kalau ada pertanyaan, langsung chat di sini aja 😊\n\n– ZYER', 1),
 ('pengingat', 'Pengingat H-1', E'Halo kak {nama} 😊\n\nMengingatkan, besok kita ada jadwal sesi foto:\n\n📅 {tanggal}\n⏰ {jam}\n📍 {lokasi}\n\nMohon datang 15 menit sebelum jadwal ya kak, supaya bisa persiapan dan dapat cahaya terbaik. Jangan lupa siapkan outfit dan properti yang sudah direncanakan.\n\nSampai ketemu besok! 📸\n– ZYER', 2),
 ('hasil', 'Pengiriman Hasil Foto', E'Halo kak {nama} 🙌\n\nHasil foto sesi {paket} sudah selesai dan bisa diunduh di link berikut:\n\n🔗 {link}\n\nLink aktif selama 30 hari, jadi segera diunduh ya kak. Terima kasih sudah percaya sama ZYER. Kalau berkenan, tag kami di Instagram @zyer.memoto saat upload ya ✨\n\n– ZYER', 3),
 ('pelunasan', 'Pengingat Pelunasan', E'Halo kak {nama} 😊\n\nMau mengingatkan untuk sisa pembayaran sesi foto tanggal {tanggal}:\n\n🧾 Sisa pembayaran : {sisa}\n\nPembayaran bisa melalui transfer, QRIS, atau cash. Setelah transfer, mohon kirim bukti pembayarannya di chat ini ya kak.\n\nTerima kasih 🙏\n– ZYER', 4),

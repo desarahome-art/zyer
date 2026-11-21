@@ -4,7 +4,7 @@ import Icon from '../components/Icon';
 import { useApp } from '../AppContext';
 import { getClient, updateClient } from '../lib/api';
 import useDeleteClient from '../lib/useDeleteClient';
-import { jamOf, rp, sisaOf, tglPanjang } from '../lib/format';
+import { itemLabel, itemTotal, itemsOf, jamOf, rp, sisaOf, tglPanjang } from '../lib/format';
 
 export default function DetailClient() {
   const { id } = useParams();
@@ -79,14 +79,15 @@ export default function DetailClient() {
         <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <section className="box">
             <h2 style={{ margin: '0 0 12px', fontSize: 17, fontWeight: 800 }}>Pembayaran</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 15 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#5F6964' }}>Harga</span><strong>{rp(c.harga)}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#5F6964' }}>DP ({c.metode})</span><strong>{rp(c.dp)}</strong></div>
-              {c.pelunasan ? <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#5F6964' }}>Pelunasan</span><strong>{rp(c.pelunasan)}</strong></div> : null}
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid #EEF0ED' }}>
-                <span style={{ fontWeight: 700 }}>Sisa</span>
-                <strong style={{ color: sisa ? '#7A4A00' : '#1E6B3A', fontSize: 19 }}>{sisa ? rp(sisa) : 'Lunas'}</strong>
-              </div>
+            <div className="bill">
+              {itemsOf(c).map((it, i) => (
+                <div key={i} className="bill-row"><span>{itemLabel(it, it.tipe === 'paket' ? c.jenis : '')}</span><span>{rp(itemTotal(it))}</span></div>
+              ))}
+              {c.diskon ? <div className="bill-row"><span>Diskon</span><span>– {rp(c.diskon)}</span></div> : null}
+              <div className="bill-row bill-sum"><span>Harga akhir</span><span>{rp(c.harga)}</span></div>
+              <div className="bill-row"><span>DP ({c.metode})</span><span>– {rp(c.dp)}</span></div>
+              {c.pelunasan ? <div className="bill-row"><span>Pelunasan</span><span>– {rp(c.pelunasan)}</span></div> : null}
+              <div className="bill-row bill-sum"><span>Sisa</span><span style={{ color: sisa ? '#7A4A00' : '#1E6B3A', fontSize: 18 }}>{sisa ? rp(sisa) : 'Lunas'}</span></div>
             </div>
             {sisa ? (
               <button className="btn-s" type="button" disabled={busy} style={{ width: '100%', marginTop: 14 }}

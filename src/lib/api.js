@@ -36,3 +36,9 @@ export const deleteLokasi = async (id) => ok(await supabase.from('lokasi').delet
 export const listTemplates = async () => ok(await supabase.from('template_wa').select('*').order('urutan'));
 export const saveTemplate = async (kode, isi) =>
   ok(await supabase.from('template_wa').update({ isi, updated_at: new Date().toISOString() }).eq('kode', kode).select().single());
+
+// ---------- Add-on ----------
+export const listAddon = async () => ok(await supabase.from('addon').select('*').order('urutan').order('created_at'));
+export const insertAddon = async (row) => ok(await supabase.from('addon').insert(row).select().single());
+export const updateAddon = async (id, patch) => ok(await supabase.from('addon').update(patch).eq('id', id).select().single());
+export const deleteAddon = async (id) => ok(await supabase.from('addon').delete().eq('id', id));

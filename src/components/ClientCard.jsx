@@ -1,5 +1,5 @@
 import Icon from './Icon';
-import { jamOf, rp, sisaOf, tglPendek } from '../lib/format';
+import { addonCount, jamOf, rp, sisaOf, tglPendek } from '../lib/format';
 
 export default function ClientCard({ c, onToggle, onWa, onMore, onOpen, busy }) {
   const sisa = sisaOf(c);
@@ -14,7 +14,7 @@ export default function ClientCard({ c, onToggle, onWa, onMore, onOpen, busy }) 
       </div>
       <div className="meta">
         <div><Icon name="calendar" size={16} />{tglPendek(c.tanggal)} · {jamOf(c.jam)}</div>
-        <div><Icon name="camera" size={16} />{[c.jenis, c.paket].filter(Boolean).join(' · ') || '–'}</div>
+        <div><Icon name="camera" size={16} /><span>{[c.jenis, c.paket].filter(Boolean).join(' · ') || '–'}{addonCount(c) ? <span className="addon-tag">+{addonCount(c)} add-on</span> : null}</span></div>
         <div><Icon name="pin" size={16} />{c.lokasi || '–'}</div>
       </div>
       <div className="pay"><span>Sisa bayar</span><strong className={sisa ? 'owe' : 'paid'}>{sisa ? rp(sisa) : 'Lunas'}</strong></div>

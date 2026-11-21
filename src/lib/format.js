@@ -46,8 +46,29 @@ export const fillTemplate = (isi, c) => {
     dp: rp(c.dp),
     sisa: sisaOf(c) ? rp(sisaOf(c)) : 'Lunas',
     link: c.link_hasil || '[link Google Drive]',
+    rincian: rincianText(c),
   };
   return String(isi || '').replace(/\{(\w+)\}/g, (m, k) => (k in map ? map[k] : m));
 };
 
 export const waLink = (c, text) => 'https://wa.me/' + waNumber(c.wa) + '?text=' + encodeURIComponent(text);
+
+/* ===== Paket ganda & add-on ===== */
+/** Daftar item tagihan client. Data lama (sebelum fitur add-on) dibuat jadi 1 item. */
+export const itemsOf = (c) => {
+  if (Array.isArray(c.items) && c.items.length) return c.items;
+  if (!c.paket && !c.harga) return [];
+  return [{ tipe: 'paket', nama: c.paket || 'Paket', harga: (c.harga || 0) + (c.diskon || 0), qty: 1 }];
+};
+export const itemTotal = (it) => (it.harga || 0) * (it.qty || 1);
+export const itemLabel = (it, jenis) => {
+  const base = it.tipe === 'paket' && jenis ? jenis + ' – ' + it.nama : it.nama;
+  return (it.qty || 1) > 1 ? base + ' × ' + it.qty : base;
+};
+export const subtotalOf = (c) => itemsOf(c).reduce((s, it) => s + itemTotal(it), 0);
+export const addonCount = (c) => itemsOf(c).filter((it) => it.tipe === 'addon').length;
+export const rincianText = (c) => {
+  const lines = itemsOf(c).map((it) => '• ' + itemLabel(it, c.jenis) + ' : ' + rp(itemTotal(it)));
+  if (c.diskon) lines.push('• Diskon : – ' + rp(c.diskon));
+  return lines.join('\n') || '–';
+};

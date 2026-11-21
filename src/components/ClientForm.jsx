@@ -1,40 +1,59 @@
 import { useMemo, useState } from 'react';
 import Sheet from './Sheet';
+import Icon from './Icon';
 import { useApp } from '../AppContext';
 import { insertClient, updateClient } from '../lib/api';
-import { num, ribuan, rp } from '../lib/format';
+import { itemsOf, itemLabel, itemTotal, num, ribuan, rp } from '../lib/format';
 
 const LAIN = '__lain__';
 const METODE = ['Transfer', 'QRIS', 'Cash'];
 
-function initialState(client, presetDate, jenis, lokasi) {
+/**
+ * Bentuk state pilihan:
+ *  pakets: { [namaPaket]: true }              -> paket yang dicentang (dalam 1 jenis sesi)
+ *  addons: { [namaAddon]: qty }               -> add-on yang dicentang + jumlahnya
+ *  lama:   [item]                              -> item dari data lama yang tidak ada lagi di Pengaturan
+ */
+function initialState(client, presetDate, jenis, lokasi, addon) {
   if (client) {
     const inList = lokasi.some((l) => l.nama === client.lokasi);
+    const j = jenis.find((x) => x.nama === client.jenis);
+    const pakets = {}; const addons = {}; const lama = [];
+    itemsOf(client).forEach((it) => {
+      if (it.tipe === 'paket') {
+        // data lama bisa menyimpan beberapa paket dalam 1 teks "A + B"
+        const names = (client.items?.length ? [it.nama] : String(it.nama).split(' + '));
+        const allKnown = j && names.every((n) => j.paket.some((p) => p.nama === n));
+        if (allKnown) names.forEach((n) => { pakets[n] = true; });
+        else lama.push({ ...it, on: true });
+      } else if (addon.some((a) => a.nama === it.nama)) addons[it.nama] = it.qty || 1;
+      else lama.push({ ...it, on: true });
+    });
     return {
       nama: client.nama, wa: client.wa, kampus: client.kampus || '',
-      jenis: client.jenis || '', paket: client.paket || '',
+      jenis: client.jenis || '', pakets, addons, lama,
       tanggal: client.tanggal || '', jam: client.jam ? String(client.jam).slice(0, 5) : '',
       orang: client.jumlah_orang ? String(client.jumlah_orang) : '',
       lok: client.lokasi ? (inList ? client.lokasi : LAIN) : (lokasi[0]?.nama || LAIN),
       lain: inList ? '' : (client.lokasi || ''),
       catatan: client.catatan || '',
-      harga: ribuan(client.harga), dp: ribuan(client.dp), metode: client.metode || 'Transfer',
+      diskon: ribuan(client.diskon), dp: ribuan(client.dp), metode: client.metode || 'Transfer',
     };
   }
   const j = jenis[0];
-  const p = j?.paket?.[0];
   return {
-    nama: '', wa: '', kampus: '', jenis: j?.nama || '', paket: p?.nama || '',
+    nama: '', wa: '', kampus: '', jenis: j?.nama || '',
+    pakets: j?.paket?.[0] ? { [j.paket[0].nama]: true } : {}, addons: {}, lama: [],
     tanggal: presetDate || '', jam: '', orang: '',
     lok: lokasi[0]?.nama || LAIN, lain: '', catatan: '',
-    harga: p ? ribuan(p.harga) : '', dp: '', metode: 'Transfer',
+    diskon: '', dp: '', metode: 'Transfer',
   };
 }
 
 export default function ClientForm() {
-  const { form, closeForm, jenis, lokasi, bump, toast } = useApp();
+  const { form, closeForm, jenis, lokasi, addon, bump, toast } = useApp();
   const editing = form?.client || null;
-  const [f, setF] = useState(() => initialState(editing, form?.presetDate, jenis, lokasi));
+  const [f, setF] = useState(() => initialState(editing, form?.presetDate, jenis, lokasi, addon));
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -43,23 +62,54 @@ export default function ClientForm() {
   const onMoney = (k) => (e) => set(k, ribuan(num(e.target.value)));
 
   const jenisAktif = useMemo(() => jenis.find((j) => j.nama === f.jenis), [jenis, f.jenis]);
-  const sisa = Math.max(0, num(f.harga) - num(f.dp) - (editing?.pelunasan || 0));
+
+  // ---- daftar item tagihan dari pilihan saat ini ----
+  const items = useMemo(() => {
+    const list = [];
+    (jenisAktif?.paket || []).forEach((p) => { if (f.pakets[p.nama]) list.push({ tipe: 'paket', nama: p.nama, harga: p.harga, qty: 1 }); });
+    f.lama.forEach((it) => { if (it.on) { const { on, ...rest } = it; list.push(rest); } });
+    addon.forEach((a) => {
+      const q = f.addons[a.nama];
+      if (q) list.push({ tipe: 'addon', nama: a.nama, harga: a.harga, qty: a.per_jumlah ? q : 1, satuan: a.per_jumlah ? a.satuan || '' : '' });
+    });
+    return list;
+  }, [jenisAktif, f.pakets, f.lama, f.addons, addon]);
+
+  const subtotal = items.reduce((s, it) => s + itemTotal(it), 0);
+  const diskon = Math.min(num(f.diskon), subtotal);
+  const total = subtotal - diskon;
+  const sisa = Math.max(0, total - num(f.dp) - (editing?.pelunasan || 0));
 
   const pickJenis = (j) => {
-    const p = j.paket[0];
-    setF((s) => ({ ...s, jenis: j.nama, paket: p?.nama || '', harga: p ? ribuan(p.harga) : s.harga }));
+    if (j.nama === f.jenis) return;
+    setF((s) => ({ ...s, jenis: j.nama, pakets: j.paket[0] ? { [j.paket[0].nama]: true } : {}, lama: s.lama.filter((it) => it.tipe !== 'paket') }));
+    setErr('');
   };
-  const pickPaket = (p) => setF((s) => ({ ...s, paket: p.nama, harga: ribuan(p.harga) }));
+  const togglePaket = (p) => setF((s) => {
+    const next = { ...s.pakets };
+    if (next[p.nama]) delete next[p.nama]; else next[p.nama] = true;
+    return { ...s, pakets: next };
+  });
+  const toggleAddon = (a) => setF((s) => {
+    const next = { ...s.addons };
+    if (next[a.nama]) delete next[a.nama]; else next[a.nama] = 1;
+    return { ...s, addons: next };
+  });
+  const qtyAddon = (a, d) => setF((s) => ({ ...s, addons: { ...s.addons, [a.nama]: Math.max(1, (s.addons[a.nama] || 1) + d) } }));
+  const toggleLama = (i) => setF((s) => ({ ...s, lama: s.lama.map((it, k) => (k === i ? { ...it, on: !it.on } : it)) }));
 
   const save = async () => {
     if (!f.nama.trim() || !f.wa.trim() || !f.tanggal) { setErr('Nama, nomor WA, dan tanggal wajib diisi.'); return; }
-    if (num(f.dp) > num(f.harga)) { setErr('DP tidak boleh lebih besar dari harga.'); return; }
+    if (!items.some((it) => it.tipe === 'paket') && items.length === 0) { setErr('Pilih minimal satu paket atau add-on.'); return; }
+    if (num(f.dp) > total) { setErr('DP tidak boleh lebih besar dari harga akhir.'); return; }
     const row = {
       nama: f.nama.trim(), wa: f.wa.trim(), kampus: f.kampus.trim(),
-      jenis: f.jenis, paket: f.paket,
+      jenis: f.jenis,
+      paket: items.filter((it) => it.tipe === 'paket').map((it) => it.nama).join(' + '),
+      items, diskon, harga: total,
       tanggal: f.tanggal, jam: f.jam || null, jumlah_orang: f.orang ? parseInt(f.orang, 10) : null,
       lokasi: f.lok === LAIN ? f.lain.trim() : f.lok,
-      catatan: f.catatan.trim(), harga: num(f.harga), dp: num(f.dp), metode: f.metode,
+      catatan: f.catatan.trim(), dp: num(f.dp), metode: f.metode,
     };
     setSaving(true);
     try {
@@ -68,7 +118,9 @@ export default function ClientForm() {
       bump();
       closeForm();
     } catch (e) {
-      setErr('Gagal menyimpan: ' + e.message);
+      setErr(e.message.includes('items') || e.message.includes('diskon')
+        ? 'Database belum diperbarui. Jalankan supabase/update-addon.sql di Supabase.'
+        : 'Gagal menyimpan: ' + e.message);
     } finally {
       setSaving(false);
     }
@@ -105,22 +157,68 @@ export default function ClientForm() {
               <button key={j.id} type="button" className={'chip' + (f.jenis === j.nama ? ' on' : '')} onClick={() => pickJenis(j)}>{j.nama}</button>
             ))}
           </div>
-          <div className="ml" id="m-paket">Paket {f.jenis}</div>
+          <div className="ml" id="m-paket">Paket {f.jenis} <span style={{ fontWeight: 500, color: '#5F6964' }}>— boleh pilih lebih dari satu</span></div>
           <div role="group" aria-labelledby="m-paket">
-            {(jenisAktif?.paket || []).map((p) => (
-              <button key={p.id} type="button" className={'pk' + (f.paket === p.nama ? ' on' : '')} onClick={() => pickPaket(p)}>
-                <span className="radio" aria-hidden="true" />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <strong style={{ display: 'block', fontSize: 15 }}>{p.nama}</strong>
-                  <span style={{ fontSize: 12, color: '#5F6964' }}>{p.keterangan}</span>
-                </span>
-                <strong style={{ fontSize: 15, color: '#1F4A36', whiteSpace: 'nowrap' }}>{rp(p.harga)}</strong>
-              </button>
-            ))}
+            {(jenisAktif?.paket || []).map((p) => {
+              const on = !!f.pakets[p.nama];
+              return (
+                <button key={p.id} type="button" role="checkbox" aria-checked={on} className={'pk' + (on ? ' on' : '')} onClick={() => togglePaket(p)}>
+                  <span className="cbx" aria-hidden="true">{on ? <Icon name="check" size={14} stroke={3.4} /> : null}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ display: 'block', fontSize: 15 }}>{p.nama}</strong>
+                    <span style={{ fontSize: 12, color: '#5F6964' }}>{p.keterangan}</span>
+                  </span>
+                  <strong style={{ fontSize: 15, color: '#1F4A36', whiteSpace: 'nowrap' }}>{rp(p.harga)}</strong>
+                </button>
+              );
+            })}
             {jenisAktif && jenisAktif.paket.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: '#5F6964' }}>Belum ada paket untuk sesi ini.</p> : null}
           </div>
         </>)}
+
+        {f.lama.length ? (
+          <div style={{ marginTop: 10 }}>
+            <div className="ml">Item dari data lama</div>
+            {f.lama.map((it, i) => (
+              <button key={i} type="button" role="checkbox" aria-checked={it.on} className={'pk' + (it.on ? ' on' : '')} onClick={() => toggleLama(i)}>
+                <span className="cbx" aria-hidden="true">{it.on ? <Icon name="check" size={14} stroke={3.4} /> : null}</span>
+                <span style={{ flex: 1, minWidth: 0, fontWeight: 700 }}>{itemLabel(it, it.tipe === 'paket' ? f.jenis : '')}</span>
+                <strong style={{ fontSize: 15, color: '#1F4A36', whiteSpace: 'nowrap' }}>{rp(itemTotal(it))}</strong>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
+
+      {addon.length ? (
+        <div>
+          <div className="sec">Add-on <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: '#5F6964' }}>(opsional)</span></div>
+          {addon.map((a) => {
+            const q = f.addons[a.nama];
+            const on = !!q;
+            return (
+              <div key={a.id} className={'pk addon-row' + (on ? ' on' : '')}>
+                <button type="button" role="checkbox" aria-checked={on} onClick={() => toggleAddon(a)} className="addon-hit">
+                  <span className="cbx" aria-hidden="true">{on ? <Icon name="check" size={14} stroke={3.4} /> : null}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ display: 'block', fontSize: 15 }}>{a.nama}</strong>
+                    <span style={{ fontSize: 12, color: '#5F6964' }}>{rp(a.harga)}{a.per_jumlah ? ' / ' + (a.satuan || 'item') : ''}{a.keterangan ? ' · ' + a.keterangan : ''}</span>
+                  </span>
+                </button>
+                {on && a.per_jumlah ? (
+                  <div className="qty" aria-label={'Jumlah ' + a.nama}>
+                    <button type="button" onClick={() => qtyAddon(a, -1)} aria-label="Kurangi" disabled={q <= 1}>–</button>
+                    <span>{q}</span>
+                    <button type="button" onClick={() => qtyAddon(a, 1)} aria-label="Tambah">+</button>
+                  </div>
+                ) : (
+                  <strong style={{ fontSize: 15, color: '#1F4A36', whiteSpace: 'nowrap' }}>{on ? rp(a.harga) : ''}</strong>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div>
         <div className="sec">Jadwal &amp; lokasi</div>
@@ -147,9 +245,16 @@ export default function ClientForm() {
 
       <div>
         <div className="sec">Pembayaran</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 12 }}>
-          <div><label className="ml" htmlFor="m-harga">Harga</label><div className="rp"><span aria-hidden="true">Rp</span>
-            <input className="mf" id="m-harga" inputMode="numeric" value={f.harga} onChange={onMoney('harga')} placeholder="0" /></div></div>
+        <div className="bill">
+          {items.length === 0 ? <div className="bill-row" style={{ color: '#5F6964' }}><span>Belum ada paket dipilih</span><span>–</span></div> : null}
+          {items.map((it, i) => (
+            <div key={i} className="bill-row"><span>{itemLabel(it, it.tipe === 'paket' ? f.jenis : '')}</span><span>{rp(itemTotal(it))}</span></div>
+          ))}
+          <div className="bill-row bill-sum"><span>Total</span><span>{rp(subtotal)}</span></div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, margin: '12px 0' }}>
+          <div><label className="ml" htmlFor="m-disk">Diskon <span style={{ fontWeight: 500, color: '#5F6964' }}>(opsional)</span></label><div className="rp"><span aria-hidden="true">Rp</span>
+            <input className="mf" id="m-disk" inputMode="numeric" value={f.diskon} onChange={onMoney('diskon')} placeholder="0" /></div></div>
           <div><label className="ml" htmlFor="m-dp">DP</label><div className="rp"><span aria-hidden="true">Rp</span>
             <input className="mf" id="m-dp" inputMode="numeric" value={f.dp} onChange={onMoney('dp')} placeholder="0" /></div></div>
         </div>
@@ -159,9 +264,11 @@ export default function ClientForm() {
             <button key={m} type="button" className={'chip' + (f.metode === m ? ' on' : '')} onClick={() => set('metode', m)}>{m}</button>
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderRadius: 14, background: '#F2F8F4', border: '1px solid #D5E8DC' }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#1F4A36' }}>Sisa pembayaran</span>
-          <strong style={{ fontSize: 20, color: '#1F4A36' }}>{sisa ? rp(sisa) : 'Lunas'}</strong>
+        <div className="bill" style={{ background: '#F2F8F4', borderColor: '#D5E8DC' }}>
+          {diskon ? <div className="bill-row"><span>Diskon</span><span>– {rp(diskon)}</span></div> : null}
+          <div className="bill-row"><span>Harga akhir</span><strong>{rp(total)}</strong></div>
+          {num(f.dp) ? <div className="bill-row"><span>DP</span><span>– {rp(num(f.dp))}</span></div> : null}
+          <div className="bill-row bill-sum" style={{ color: '#1F4A36' }}><span>Sisa pembayaran</span><span style={{ fontSize: 20 }}>{sisa ? rp(sisa) : 'Lunas'}</span></div>
         </div>
       </div>
 

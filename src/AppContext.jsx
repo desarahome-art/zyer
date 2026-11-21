@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { listJenisWithPaket, listLokasi, listTemplates } from './lib/api';
+import { listAddon, listJenisWithPaket, listLokasi, listTemplates } from './lib/api';
 import { DEFAULT_TEMPLATES } from './lib/defaults';
 
 const Ctx = createContext(null);
@@ -13,6 +13,7 @@ const FALLBACK_TEMPLATES = [
 export function AppProvider({ children }) {
   const [jenis, setJenis] = useState([]);
   const [lokasi, setLokasi] = useState([]);
+  const [addon, setAddon] = useState([]);
   const [templates, setTemplates] = useState(FALLBACK_TEMPLATES);
   const [settingsError, setSettingsError] = useState('');
 
@@ -41,12 +42,19 @@ export function AppProvider({ children }) {
     } catch (e) {
       setSettingsError(e.message);
     }
+    try {
+      setAddon(await listAddon());
+    } catch (e) {
+      // tabel addon belum dibuat (update-addon.sql belum dijalankan)
+      setAddon([]);
+      setSettingsError((prev) => prev || 'Tabel add-on belum ada. Jalankan supabase/update-addon.sql di Supabase.');
+    }
   }, []);
 
   useEffect(() => { reloadSettings(); }, [reloadSettings]);
 
   const value = {
-    jenis, lokasi, templates, settingsError, reloadSettings, setJenis, setLokasi, setTemplates,
+    jenis, lokasi, addon, templates, settingsError, reloadSettings, setJenis, setLokasi, setTemplates,
     form, openForm: (opts = {}) => setForm(opts), closeForm: () => setForm(null),
     waClient, openWa: (c) => setWaClient(c), closeWa: () => setWaClient(null),
     version, bump, toast, toasts, dismissToast,

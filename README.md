@@ -16,6 +16,10 @@ Dibuat dengan **React (Vite)** + **Supabase** (database), siap di-deploy ke **Ve
    - **Project URL** → contoh `https://abcd1234.supabase.co`
    - **anon public key** (di project baru bisa bernama **Publishable key**, `sb_publishable_…` — keduanya bisa dipakai)
 
+### Update fitur Paket Ganda + Add-on + Diskon
+Kalau database sudah dibuat **sebelum** fitur ini, jalankan sekali file `supabase/update-addon.sql`
+di SQL Editor (tempel → Run). Data client lama tetap aman. Project baru cukup menjalankan `schema.sql`.
+
 ## 2. Coba di laptop (opsional)
 
 Butuh Node.js 18 atau lebih baru.
@@ -72,7 +76,8 @@ src/styles.css           → tampilan (otomatis menyesuaikan laptop & HP)
 
 ## Kode otomatis di Template WA
 
-`{nama}` `{tanggal}` `{jam}` `{lokasi}` `{paket}` `{harga}` `{dp}` `{sisa}` `{link}`
+`{nama}` `{tanggal}` `{jam}` `{lokasi}` `{paket}` `{rincian}` `{harga}` `{dp}` `{sisa}` `{link}`
+— `{rincian}` berisi daftar paket, add-on, dan diskon beserta harganya.
 — diganti dengan data client saat tombol **Chat WA** ditekan. `{link}` diambil dari kolom "Link hasil foto" di halaman Detail Client.
 
 ---
